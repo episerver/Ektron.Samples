@@ -6,27 +6,40 @@
 
     protected void Page_Load(object sender, EventArgs e)
     {
-        //Check for postback since we don't need to reload the form list.
-        if (!IsPostBack)
+        //check if the user is a cms user
+        if (IsCMSUser())
         {
-            purgedate.Value = DateTime.Today.AddMonths(-1).ToShortDateString();
-            Ektron.Cms.Framework.Content.FormManager fManager = new Ektron.Cms.Framework.Content.FormManager();
-            Ektron.Cms.Common.FormCriteria criteria = new Ektron.Cms.Common.FormCriteria();
-            criteria.AddFilter(Ektron.Cms.Common.FormProperty.Id, Ektron.Cms.Common.CriteriaFilterOperator.GreaterThan, 0);
-            criteria.PagingInfo = new Ektron.Cms.PagingInfo(100000);
-            var formList = fManager.GetList(criteria);
-            if (formList.Count > 0)
+            //Check for postback since we don't need to reload the form list.
+            if (!IsPostBack)
             {
-                //loop through all forms and add to a list.
-                formIdList.Items.Add(new ListItem("Please select a form from the list", "0"));
-                foreach (var item in formList)
+                purgedate.Value = DateTime.Today.AddMonths(-1).ToShortDateString();
+                Ektron.Cms.Framework.Content.FormManager fManager = new Ektron.Cms.Framework.Content.FormManager();
+                Ektron.Cms.Common.FormCriteria criteria = new Ektron.Cms.Common.FormCriteria();
+                criteria.AddFilter(Ektron.Cms.Common.FormProperty.Id, Ektron.Cms.Common.CriteriaFilterOperator.GreaterThan, 0);
+                criteria.PagingInfo = new Ektron.Cms.PagingInfo(100000);
+                var formList = fManager.GetList(criteria);
+                if (formList.Count > 0)
                 {
-                    formIdList.Items.Add(new ListItem(item.Title, item.Id.ToString()));
+                    //loop through all forms and add to a list.
+                    formIdList.Items.Add(new ListItem("Please select a form from the list", "0"));
+                    foreach (var item in formList)
+                    {
+                        formIdList.Items.Add(new ListItem(item.Title, item.Id.ToString()));
+                    }
                 }
             }
         }
     }
 
+    /// <summary>
+    /// check if the user is a cms user.
+    /// </summary>
+    /// <returns></returns>
+    private bool IsCMSUser()
+    {
+        return Ektron.Cms.ObjectFactory.GetUser().IsCmsLoggedIn;
+    }
+    
     /// <summary>
     /// Handle the delete event 
     /// </summary>
@@ -34,45 +47,48 @@
     /// <param name="e"></param>
     protected void delete_Click(object sender, EventArgs e)
     {
-        //string builder for output messaging
-        StringBuilder sb = new StringBuilder();
-        try
+        if (IsCMSUser())
         {
-            //parse the form id
-            long formID = long.Parse(formIdList.SelectedValue);
-            //parse the purge date
-            DateTime purgeDate = DateTime.Parse(purgedate.Value);
-            if (formID > 0 && purgeDate > DateTime.Now.AddYears(-20))
+            //string builder for output messaging
+            StringBuilder sb = new StringBuilder();
+            try
             {
-                //get a list of items that fall in that range
-                Ektron.Cms.Framework.Content.FormManager fManager = new Ektron.Cms.Framework.Content.FormManager();
-                Ektron.Cms.Common.FormSubmittedCriteria criteria = new Ektron.Cms.Common.FormSubmittedCriteria();
-                criteria.AddFilter(Ektron.Cms.Common.FormSubmittedProperty.FormId, Ektron.Cms.Common.CriteriaFilterOperator.EqualTo, formID);
-                criteria.AddFilter(Ektron.Cms.Common.FormSubmittedProperty.DateSubmitted, Ektron.Cms.Common.CriteriaFilterOperator.GreaterThanOrEqualTo, purgeDate);
-                criteria.PagingInfo = new Ektron.Cms.PagingInfo(1000000);
-                var data = fManager.GetSubmittedFormList(criteria);
-                Ektron.Cms.API.Content.Content capi = new Ektron.Cms.API.Content.Content();
-                Ektron.Cms.Modules.EkModule module = capi.EkModuleRef;
-                sb.Append("<div class='alert alert-info'>Total Items: " + data.Count + "</div>");
-                if (data.Count > 0)
+                //parse the form id
+                long formID = long.Parse(formIdList.SelectedValue);
+                //parse the purge date
+                DateTime purgeDate = DateTime.Parse(purgedate.Value);
+                if (formID > 0 && purgeDate > DateTime.Now.AddYears(-20))
                 {
-                    //loop through items to purge.
-                    foreach (var item in data)
+                    //get a list of items that fall in that range
+                    Ektron.Cms.Framework.Content.FormManager fManager = new Ektron.Cms.Framework.Content.FormManager();
+                    Ektron.Cms.Common.FormSubmittedCriteria criteria = new Ektron.Cms.Common.FormSubmittedCriteria();
+                    criteria.AddFilter(Ektron.Cms.Common.FormSubmittedProperty.FormId, Ektron.Cms.Common.CriteriaFilterOperator.EqualTo, formID);
+                    criteria.AddFilter(Ektron.Cms.Common.FormSubmittedProperty.DateSubmitted, Ektron.Cms.Common.CriteriaFilterOperator.GreaterThanOrEqualTo, purgeDate);
+                    criteria.PagingInfo = new Ektron.Cms.PagingInfo(1000000);
+                    var data = fManager.GetSubmittedFormList(criteria);
+                    Ektron.Cms.API.Content.Content capi = new Ektron.Cms.API.Content.Content();
+                    Ektron.Cms.Modules.EkModule module = capi.EkModuleRef;
+                    sb.Append("<div class='alert alert-info'>Total Items: " + data.Count + "</div>");
+                    if (data.Count > 0)
                     {
-                        try
+                        //loop through items to purge.
+                        foreach (var item in data)
                         {
-                            sb.Append("<div class='alert alert-info'>Deleting item: " + item.Id + "</div>");
-                            var success = module.PurgeFormData(formID.ToString(), item.Id.ToString());
+                            try
+                            {
+                                sb.Append("<div class='alert alert-info'>Deleting item: " + item.Id + "</div>");
+                                var success = module.PurgeFormData(formID.ToString(), item.Id.ToString());
+                            }
+                            catch { sb.Append("<div class='alert alert-danger'>Error Deleting item: " + item.Id + "</div>"); }
                         }
-                        catch { sb.Append("<div class='alert alert-danger'>Error Deleting item: " + item.Id + "</div>"); }
                     }
                 }
             }
+            catch (Exception ex)
+            {
+            }
+            output.Text = sb.ToString();
         }
-        catch (Exception ex)
-        {
-        }
-        output.Text = sb.ToString();
     }
 </script>
 
